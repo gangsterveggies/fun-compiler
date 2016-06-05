@@ -102,7 +102,7 @@ term = do reserved "let"  -- let/in expression
               e <- term
               reserved "of"
               xs <- caseTerm `sepBy` bar
-              return (CaseS e xs)
+              return (Case e xs)
        <|> listTerm
        -- otherwise: operator expressions
        <|> opterm
@@ -123,16 +123,15 @@ listTerm = do ls <- brackets (term `sepBy` comma)
               return (buildList ls)
 
 -- an expression used in a case construct
-caseTerm :: Parser (Name, Ident, Term)
-caseTerm = do nm <- identifier
-              ident <- parens identifier
+caseTerm :: Parser (Term, Term)
+caseTerm = do e1 <- term
               reservedOp "->"
-              e <- term
-              return (nm, ident, e)
+              e2 <- term
+              return (e1, e2)
            <|> do reserved "otherwise"
                   reservedOp "->"
                   e <- term
-                  return ("", "_", e)
+                  return (Var "_", e)
 
 -- builds a list term from an actual list
 buildList :: [Term] -> Term
@@ -197,7 +196,7 @@ postProcess t = case t of
     _         -> App (pp e1) (pp e2)
   Case t xs -> App (pp (Lambda
                         (getCaseVar 0)
-                        (match (map (\(x, y) -> ([x], y)) xs) 0)))
+                        (match (map (\(x, y) -> ([x], y)) xs) 0 errorCont)))
                (pp t)
   t -> applyTo (pp) t
   where pp = postProcess
@@ -260,35 +259,55 @@ getConst (Const a) = a
 deConst :: ([Term], Term) -> ([Term], Term)
 deConst (x:xs, t) = (xs, t)
 
--- Pattern matching generator (TODO: mixture rule)
-match :: [([Term], Term)] -> Int -> Term
-match xs v
+-- Get type of a term
+getType :: Term -> Int
+getType (Var _) = 0
+getType (Const _) = 1
+getType (Pair _ _) = 2
+getType (Cons _ _) = 3
+
+-- The error continuation
+errorCont :: Int -> Term
+errorCont _ = (CaseS (Cons "P" (Const 0)) [("D", "_", Const 0)])
+
+-- Pattern matching generator
+match :: [([Term], Term)] -> Int -> (Int -> Term) -> Term
+match xs v c
   | allEmpty xs = snd $ head xs -- The empty rule
-  | allVar xs   = match (map (elemVar v) xs) (v + 1) -- The variable rule
+  | allVar xs   = match (map (elemVar v) xs) (v + 1) c -- The variable rule
   | allConst xs = foldl -- The constant rule
                   (\y (c, x) -> IfZero ((Var (getCaseVar v)) :- Const c) x y)
-                  (CaseS (Cons "P" (Const 0)) [("D", "_", Const 0)])
+                  (c v)
                   (map
                    (\x -> (
                        (getConst . head . fst . head) x,
-                       match (map deConst x) (v + 1)))
+                       match (map deConst x) (v + 1) c))
                    (groupBy
                     (\a b -> let key = (getConst . head . fst) in key a == key b)
                     xs))
-  | allPair xs = Let (getCaseVar (v + 1)) -- The pair rule
+  | allPair xs  = Let (getCaseVar (v + 1)) -- The pair rule
                   (Fst (Var (getCaseVar v)))
                   (Let (getCaseVar (v + 2))
                    (Snd (Var (getCaseVar v)))
-                   (match (map dePair xs) (v + 1)))
+                   (match (map dePair xs) (v + 1) c))
   | allCons xs  = CaseS (Var (getCaseVar v)) -- The constructor rule
                   (map
                   (\x -> (
                       (getCons . head . fst . head) x,
                       getCaseVar (v + 1),
-                      match (map deCons x) (v + 1)))
+                      match (map deCons x) (v + 1) c))
                   (groupBy
                    (\a b -> let key = (getCons . head . fst) in key a == key b)
-                   xs))
+                   xs) ++
+                  [("", "_", c v)]
+                  )
+  | otherwise   = (let g = (groupBy -- The mixture rule
+                            (\a b -> let key = (getType . head . fst) in key a == key b)
+                            xs)
+                   in (match
+                       (head g)
+                       v
+                       (\x -> match (concat $ tail g) x c)))
   where allEmpty s = all (null . fst) s
         allVar s   = all (isVar . head . fst) s
         allConst s = all (isConst . head . fst) s

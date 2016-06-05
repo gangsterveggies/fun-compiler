@@ -30,9 +30,9 @@ import SECD2
 main :: IO ()
 main = do
   args <- getArgs
---  cd <- parseCode (args !! 0)
-  let cd = postProcess $ ex !! (read $ head args)
-  putStrLn $ show $ cd
+  cd <- parseCode (args !! 0)
+--  let cd = postProcess $ ex !! (read $ head args)
+--  putStrLn $ show $ cd
   putStrIf (length args > 2) $ show $ (resolveLabels . runCodeGen . compileMain) cd
   putStrIf (length args > 2) $ show $ (assemble . resolveLabels . runCodeGen . compileMain) cd
   writeBytecode (args !! 1) $ (assemble . resolveLabels . runCodeGen . compileMain) cd
