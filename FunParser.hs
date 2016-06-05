@@ -20,6 +20,10 @@ import Text.ParserCombinators.Parsec.Language
 import Text.ParserCombinators.Parsec.Expr
 import qualified Text.ParserCombinators.Parsec.Token as P
 
+import Debug.Trace
+traceMonad :: (Show a, Monad m) => String -> a -> m a
+traceMonad v x = trace ("Debug: " ++ v ++ " " ++ show x) (return x)
+
 -- setup a Haskell-like lexer using the Parsec tokenizer 
 lexer = P.makeTokenParser fun
   where fun = haskellStyle { reservedNames = ["ifzero", "then", "else",
@@ -27,7 +31,7 @@ lexer = P.makeTokenParser fun
                                               "cons", "case", "of",
                                               "otherwise"]
                            , reservedOpNames = ["=", "->", "\\", 
-                                                "*", "+", "-"],
+                                                "*", "+", "-", "."],
                              identStart = letter <|> underscore
                            }
 
@@ -37,11 +41,13 @@ identifier = P.identifier lexer
 natural    = P.natural lexer
 parens     = P.parens lexer
 brackets   = P.brackets lexer
+braces     = P.braces lexer
 whiteSpace = P.whiteSpace lexer
 symbol     = P.symbol lexer
 comma      = symbol ","
 bar        = symbol "|"
 colon      = symbol ":"
+semmi      = symbol ";"
 underscore = char '_'
 
 
@@ -67,45 +73,68 @@ start = do e<-term
            eof 
            return e 
 
-term :: Parser Term      -- top-level expression
-term = do reserved "let"  -- let/in expression
-          x<-identifier
-          reservedOp "="
-          e1<-term
-          reserved "in"
-          e2<-term
-          return (Let x e1 e2)
-       <|> do reserved "ifzero"   -- ifzero/then/else
-              e1 <- term
-              reserved "then"
-              e2 <- term
-              reserved "else"
-              e3 <- term
-              return (IfZero e1 e2 e3)
-       <|> do reserved "fix"         -- fixpoint operator
-              e <- term
-              return (Fix e)
-       -- lambda-abstraction
-       -- multiple identifiers are expanded into curried form
-       -- i.e.: "\x y z -> e" ==> "\x -> \y -> \z -> e"
-       <|> do reservedOp "\\"  
-              xs <- many1 identifier  
-              reservedOp "->"
-              e <- term
-              return (foldr Lambda e xs)
-       <|> pairTerm
-       <|> do reserved "cons"
-              ident <- identifier
-              e <- parens term
-              return (Cons ident e)
-       <|> do reserved "case"
-              e <- term
-              reserved "of"
-              xs <- caseTerm `sepBy` bar
-              return (Case e xs)
-       <|> listTerm
-       -- otherwise: operator expressions
-       <|> opterm
+-- parse a generic term
+term :: Parser Term
+term = do try doterm
+       <|> mterm
+
+-- parse a term with a selector
+doterm :: Parser Term
+doterm = do e <- mterm
+            reservedOp "."
+            x <- identifier
+            return (Select x e)
+
+-- parse a specific term
+mterm :: Parser Term      -- top-level expression
+mterm = do reserved "let"  -- let/in expression
+           x<-identifier
+           reservedOp "="
+           e1<-term
+           reserved "in"
+           e2<-term
+           return (Let x e1 e2)
+        <|> do reserved "ifzero"   -- ifzero/then/else
+               e1 <- term
+               reserved "then"
+               e2 <- term
+               reserved "else"
+               e3 <- term
+               return (IfZero e1 e2 e3)
+        <|> do reserved "fix"         -- fixpoint operator
+               e <- term
+               return (Fix e)
+        -- lambda-abstraction
+        -- multiple identifiers are expanded into curried form
+        -- i.e.: "\x y z -> e" ==> "\x -> \y -> \z -> e"
+        <|> do reservedOp "\\"  
+               xs <- many1 identifier  
+               reservedOp "->"
+               e <- term
+               return (foldr Lambda e xs)
+        <|> pairTerm
+        <|> do reserved "cons"
+               ident <- identifier
+               e <- parens term
+               return (Cons ident e)
+        <|> do reserved "case"
+               e <- term
+               reserved "of"
+               xs <- caseTerm `sepBy` bar
+               return (Case e xs)
+        <|> recordTerm
+        <|> listTerm
+        -- otherwise: operator expressions
+        <|> opterm
+
+-- parse a record
+recordTerm :: Parser Term
+recordTerm = do es <- braces (record `sepBy1` semmi)
+                return (Record es)
+  where record = do s <- identifier
+                    reservedOp "="
+                    e <- term
+                    return (s, e)
 
 -- parse a pair
 pairTerm :: Parser Term

@@ -37,7 +37,9 @@ data Instr l = HALT             -- finished
              | FST              -- first from pair
              | SND              -- second from pair
              | CONS Int         -- constructor
-             | MATCH [(Int, l)] -- constructor
+             | MATCH [(Int, l)] -- constructor selector
+             | REC [(Int, l)]   -- record
+             | SLT Int          -- record selector
              deriving (Show, Functor)
 
 -- symbolic labels are just strings
@@ -131,12 +133,28 @@ compile (CaseS e alts) sym
        cases <- compileCase alts sym
        return (code ++ [MATCH cases])
 
+compile (Record alts) sym
+  = do cases <- compileRecord alts sym
+       return ([REC cases])
+
+compile (Select lb e) sym
+  = do code <- compile e sym
+       return (code ++ [SLT (hashName lb)])
+
 compileCase :: [(Name, Ident, Term)] -> [Ident] -> CodeGen [(Int, Label)]
 compileCase [] _ = return []
 compileCase ((nm, idt, e):xs) sym
   = do code <- compile e (idt:sym)
        l <- newBlock (code ++ [JOIN])
        cases <- compileCase xs sym
+       return ((hashName nm, l) : cases)
+
+compileRecord :: [(Name, Term)] -> [Ident] -> CodeGen [(Int, Label)]
+compileRecord [] _ = return []
+compileRecord ((nm, e):xs) sym
+  = do code <- compile e sym
+       l <- newBlock (code ++ [JOIN])
+       cases <- compileRecord xs sym
        return ((hashName nm, l) : cases)
        
 
@@ -198,6 +216,10 @@ instance Asm (Instr Addr) where
   assemble (MATCH ls)  = [16, length ls] ++ (assembleMatch ls)
     where assembleMatch []          = []
           assembleMatch ((n, l):xs) = [n, l] ++ (assembleMatch xs)
+  assemble (REC ls)    = [17, length ls] ++ (assembleRecord ls)
+    where assembleRecord []          = []
+          assembleRecord ((n, l):xs) = [n, l] ++ (assembleRecord xs)
+  assemble (SLT n)     = [18, n]
 
 instance Asm a => Asm [a] where
   assemble = concatMap assemble

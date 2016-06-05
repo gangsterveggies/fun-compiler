@@ -60,6 +60,7 @@ value_t interp(void) {
     int t;              // temporary register
     closure_t *cptr;    // closure pointer
     env_t nenv;         // temporary environment
+    int i;
 
     int opcode = code[pc++];    // fetch next opcode
 
@@ -172,7 +173,7 @@ value_t interp(void) {
       opb = lookup(1, cptr->env); // code
       env = extend(opb, env); // augment environment
 
-      int i, selcode = -1; // selected code
+      int selcode = -1; // selected code
       for (i = 0; i < t; i++) {
         int lb = code[pc++]; // fetch label
         int vl = code[pc++]; // fetch object
@@ -190,6 +191,49 @@ value_t interp(void) {
       dump[dp].pc = pc; // save pc in dump
       dp++;
       pc = selcode; // jump to code address in closure
+
+      break;
+
+    case RECORD:
+      t = code[pc++]; // fetch number of alts
+
+      int ct = 0;
+      for (i = 0; i < t; i++) {
+        int lb = code[pc++]; // fetch label
+        int vl = code[pc++]; // fetch object
+
+        if (i == 0) {
+          nenv = extend(vl, NULL);
+        }
+        else {
+          nenv = extend(vl, nenv);
+        }
+        nenv = extend(lb, nenv);
+      }
+
+      cptr = mkclosure(-1, nenv);
+      stack[sp++] = (value_t) cptr;
+
+      break;
+
+    case SELECT:
+      t = code[pc++]; // fetch label
+      cptr = (closure_t*) stack[--sp]; // pair on top of stack
+      nenv = cptr->env;
+
+      while (nenv != NULL) {
+        int lb = nenv->elm;
+        nenv = nenv->next;
+        int vl = nenv->elm;
+        nenv = nenv->next;
+
+        if (lb == t) {
+          dump[dp].pc = pc; // save pc in dump
+          dp++;
+          pc = vl; // jump to code address in closure
+          break;
+        }
+      }
 
       break;
 

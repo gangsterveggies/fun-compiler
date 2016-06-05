@@ -36,8 +36,10 @@ data Term = Var Ident               -- variables
           | Fst Term
           | Snd Term
           | Cons Name Term          -- constructor
-          | CaseS Term [(Name, Ident, Term)] -- case
-          | Case Term [(Term, Term)]
+          | CaseS Term [(Name, Ident, Term)] -- simple case
+          | Case Term [(Term, Term)]  -- generic case
+          | Record [(Name, Term)] -- records
+          | Select Name Term -- select record
             deriving (Eq, Show)
 
 -- indentifiers are just strings
@@ -75,6 +77,8 @@ ex = [
   -- Testar cons (nota: implementar otherwise)
   CaseS (Cons "P" (Const 3)) [("P", "x", Var "x" :+ Const 1), (("S", "x", Var "x" :+ Const 2))],
   CaseS (Cons "S" (Const 3)) [("P", "x", Var "x" :+ Const 1), (("S", "x", Var "x" :+ Const 2))],
+  -- Testar records
+  Select "idade" (Record [("nome", Const 2002724418), ("idade", Const 21)]),
   -- Testar pattern matching
   Case (Const 2) [(Var "x", Var "x" :+ Const 2)],
   Case (Pair (Const 2) (Const 3)) [(Pair (Var "x") (Var "y"), Var "x" :+ Var "y")],

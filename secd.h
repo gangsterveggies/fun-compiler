@@ -24,6 +24,8 @@
 #define SND     14
 #define CONS    15
 #define MATCH   16
+#define RECORD  17
+#define SELECT  18
 
 /* values: 
    either an int or a pointer

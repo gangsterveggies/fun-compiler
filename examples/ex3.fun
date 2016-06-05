@@ -1,5 +1,2 @@
-let snd =
-  \x -> x + 1
-in
-  snd (3, 2)
+snd (\x -> x + 1, \x -> x + 2) 3
 
