@@ -4,3 +4,6 @@ let fact =
     | n -> (n * f (n - 1))
 in
   fact 5
+
+-- A rewrite of example 1 using
+-- pattern matching

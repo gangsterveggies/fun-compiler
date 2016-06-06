@@ -40,6 +40,9 @@ data Instr l = HALT             -- finished
              | MATCH [(Int, l)] -- constructor selector
              | REC [(Int, l)]   -- record
              | SLT Int          -- record selector
+             | LST              -- less than
+             | GTT              -- greater than
+             | ROUT             -- output is record
              deriving (Show, Functor)
 
 -- symbolic labels are just strings
@@ -66,6 +69,10 @@ compile (Var x) sym
         Just k -> return [LD k]
 -- "elemIndex x xs" 
 -- gives the index of first occurence of x in xs or Nothing 
+
+compile (Rout e) sym
+  = do code <- compile e sym  
+       return (code ++ [ROUT])
 
 compile (Lambda x e) sym 
   = do code <- compile e (x:sym) 
@@ -99,6 +106,16 @@ compile (e1 :* e2) sym
   = do code1<-compile e1 sym 
        code2<-compile e2 sym 
        return (code1 ++ code2 ++ [MUL])
+
+compile (e1 :< e2) sym 
+  = do code1<-compile e1 sym 
+       code2<-compile e2 sym 
+       return (code1 ++ code2 ++ [LST])
+
+compile (e1 :> e2) sym 
+  = do code1<-compile e1 sym 
+       code2<-compile e2 sym 
+       return (code1 ++ code2 ++ [GTT])
 
 compile (IfZero e1 e2 e3) sym
   = do code1 <- compile e1 sym  
@@ -220,6 +237,9 @@ instance Asm (Instr Addr) where
     where assembleRecord []          = []
           assembleRecord ((n, l):xs) = [n, l] ++ (assembleRecord xs)
   assemble (SLT n)     = [18, n]
+  assemble LST         = [19]
+  assemble GTT         = [20]
+  assemble ROUT        = [21]
 
 instance Asm a => Asm [a] where
   assemble = concatMap assemble

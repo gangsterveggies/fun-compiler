@@ -29,6 +29,8 @@ data Term = Var Ident               -- variables
           | Term :+ Term            -- arithmetic operators
           | Term :- Term
           | Term :* Term
+          | Term :< Term
+          | Term :> Term
           | IfZero Term Term Term   -- conditional
           | Let Ident Term Term     -- local definition
           | Fix Term                -- fixed-point operator
@@ -40,6 +42,8 @@ data Term = Var Ident               -- variables
           | Case Term [(Term, Term)]  -- generic case
           | Record [(Name, Term)] -- records
           | Select Name Term -- select record
+          | Data Name [Term] -- generic data constructor
+          | Rout Term -- signal to output a record
             deriving (Eq, Show)
 
 -- indentifiers are just strings
@@ -67,19 +71,18 @@ fv (Cons _ e)    = fv e
 
 -- end of file -------------------------------------------------
 
--- Exemplos feitos pelo Pedro Paredes
-
+-- Debug tests
 ex :: [Term]
 ex = [
-  -- Testar pair, fst e snd
+  -- Test pair, fst and snd
   Let "x" (Const 3) (Fst (Pair (Const 3 :+ Var "x") (Const 1 :+ Var "x"))),
   Let "x" (Const 3) (Snd (Pair (Const 3 :+ Var "x") (Const 1 :+ Var "x"))),
-  -- Testar cons (nota: implementar otherwise)
+  -- Test cons
   CaseS (Cons "P" (Const 3)) [("P", "x", Var "x" :+ Const 1), (("S", "x", Var "x" :+ Const 2))],
   CaseS (Cons "S" (Const 3)) [("P", "x", Var "x" :+ Const 1), (("S", "x", Var "x" :+ Const 2))],
-  -- Testar records
+  -- Test records
   Select "idade" (Record [("nome", Const 2002724418), ("idade", Const 21)]),
-  -- Testar pattern matching
+  -- Test pattern matching
   Case (Const 2) [(Var "x", Var "x" :+ Const 2)],
   Case (Pair (Const 2) (Const 3)) [(Pair (Var "x") (Var "y"), Var "x" :+ Var "y")],
   Case (Cons "D" (Const 2)) [(Cons "P" (Var "x"), Var "x" :+ Const 1), (Cons "D" (Var "x"), Var "x" :+ Const 2)],

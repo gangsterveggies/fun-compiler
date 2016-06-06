@@ -29,9 +29,10 @@ lexer = P.makeTokenParser fun
   where fun = haskellStyle { reservedNames = ["ifzero", "then", "else",
                                               "let", "in", "fix",
                                               "cons", "case", "of",
-                                              "otherwise"]
+                                              "otherwise", "record", "out"]
                            , reservedOpNames = ["=", "->", "\\", 
-                                                "*", "+", "-", "."],
+                                                "*", "+", "-",
+                                                ".", "<", ">"],
                              identStart = letter <|> underscore
                            }
 
@@ -68,64 +69,60 @@ underscore = char '_'
    see also the documentation on "parse" and "parseFromFile".
 -}
 start :: Parser Term  -- start non-terminal
-start = do e<-term
+start = do try (reservedOp "#")
+           reserved "record"
+           reserved "output"
+           e<-term
            whiteSpace
            eof 
-           return e 
-
--- parse a generic term
-term :: Parser Term
-term = do try doterm
-       <|> mterm
-
--- parse a term with a selector
-doterm :: Parser Term
-doterm = do e <- mterm
-            reservedOp "."
-            x <- identifier
-            return (Select x e)
+           return (Rout e)
+        <|> do e<-term
+               whiteSpace
+               eof 
+               return e
 
 -- parse a specific term
-mterm :: Parser Term      -- top-level expression
-mterm = do reserved "let"  -- let/in expression
-           x<-identifier
-           reservedOp "="
-           e1<-term
-           reserved "in"
-           e2<-term
-           return (Let x e1 e2)
-        <|> do reserved "ifzero"   -- ifzero/then/else
-               e1 <- term
-               reserved "then"
-               e2 <- term
-               reserved "else"
-               e3 <- term
-               return (IfZero e1 e2 e3)
-        <|> do reserved "fix"         -- fixpoint operator
-               e <- term
-               return (Fix e)
-        -- lambda-abstraction
-        -- multiple identifiers are expanded into curried form
-        -- i.e.: "\x y z -> e" ==> "\x -> \y -> \z -> e"
-        <|> do reservedOp "\\"  
-               xs <- many1 identifier  
-               reservedOp "->"
-               e <- term
-               return (foldr Lambda e xs)
-        <|> pairTerm
-        <|> do reserved "cons"
-               ident <- identifier
-               e <- parens term
-               return (Cons ident e)
-        <|> do reserved "case"
-               e <- term
-               reserved "of"
-               xs <- caseTerm `sepBy` bar
-               return (Case e xs)
-        <|> recordTerm
-        <|> listTerm
-        -- otherwise: operator expressions
-        <|> opterm
+term :: Parser Term      -- top-level expression
+term = do reserved "let"  -- let/in expression
+          x<-identifier
+          reservedOp "="
+          e1<-term
+          reserved "in"
+          e2<-term
+          return (Let x e1 e2)
+       <|> do reserved "ifzero"   -- ifzero/then/else
+              e1 <- term
+              reserved "then"
+              e2 <- term
+              reserved "else"
+              e3 <- term
+              return (IfZero e1 e2 e3)
+       <|> do reserved "fix"         -- fixpoint operator
+              e <- term
+              return (Fix e)
+       -- lambda-abstraction
+       -- multiple identifiers are expanded into curried form
+       -- i.e.: "\x y z -> e" ==> "\x -> \y -> \z -> e"
+       <|> do reservedOp "\\"  
+              xs <- many1 identifier  
+              reservedOp "->"
+              e <- term
+              return (foldr Lambda e xs)
+       <|> do reserved "cons"
+              ident <- identifier
+              e <- parens term
+              return (Cons ident e)
+       <|> do reserved "case"
+              e <- term
+              reserved "of"
+              xs <- caseTerm `sepBy` bar
+              return (Case e xs)
+       <|> do reserved "data"
+              ident <- identifier
+              xs <- parens (term `sepBy` comma)
+              return (Data ident xs)
+       -- otherwise: operator expressions
+       <|> opterm
 
 -- parse a record
 recordTerm :: Parser Term
@@ -135,11 +132,6 @@ recordTerm = do es <- braces (record `sepBy1` semmi)
                     reservedOp "="
                     e <- term
                     return (s, e)
-
--- parse a pair
-pairTerm :: Parser Term
-pairTerm = do es <- parens (term `sepBy1` comma)
-              return (joinPair es)
 
 -- join elements for pair in pair construct
 joinPair :: [Term] -> Term
@@ -171,7 +163,9 @@ buildList (x:xs) = (Cons "list" (Pair x (buildList xs)))
 -- uses the Parsec expression parser builder
 opterm :: Parser Term
 opterm = buildExpressionParser table apterm
-    where table = [[binary ":" (\x y -> Cons "list" (Pair x y)) AssocRight],
+    where table = [[binary "." (\x y -> Select (getVar y) x) AssocLeft],
+                   [binary ">" (:>) AssocLeft, 
+                    binary "<" (:<) AssocLeft],
                    [binary "*" (:*) AssocLeft],
                    [binary "+" (:+) AssocLeft, 
                     binary "-" (:-) AssocLeft]]
@@ -184,18 +178,33 @@ apterm :: Parser Term
 apterm = do es<-many1 delterm
             return (foldl1 App es)
 
-
-
 -- self-delimited expressions: 
--- identifiers, constants or parentesised terms
+-- identifiers, constants, lists, records and compound terms
 delterm :: Parser Term
-delterm = do x<-identifier 
+delterm = do x <- identifier
              return (Var x) 
           <|> do n<-natural 
                  return (Const (fromInteger n))
-          <|> try (parens term)
-          <|> pairTerm
           <|> listTerm
+          <|> recordTerm
+          <|> cterm
+
+-- parse a compound term (joined by colons)
+cterm :: Parser Term
+cterm = do xs <- parens (pterm `sepBy1` colon)
+           if length xs == 1 then
+             return (head xs)
+             else
+             return (foldr1 (\x y -> Cons "list" (Pair x y)) xs)
+
+-- parse a pair term
+pterm :: Parser Term
+pterm = do xs <- (term `sepBy1` comma)
+           if length xs == 1 then
+             return (head xs)
+             else
+             return (joinPair xs)
+
 
 -- Applies a function to term
 applyTo :: (Term -> Term) -> Term -> Term
@@ -205,6 +214,8 @@ applyTo f t = case t of
   e1 :+ e2 -> (f e1) :+ (f e2)
   e1 :- e2 -> (f e1) :- (f e2)
   e1 :* e2 -> (f e1) :* (f e2)
+  e1 :< e2 -> (f e1) :< (f e2)
+  e1 :> e2 -> (f e1) :> (f e2)
   IfZero e1 e2 e3 -> IfZero (f e1) (f e2) (f e3)
   Let i e1 e2 -> Let i (f e1) (f e2)
   Fix e -> Fix (f e)
@@ -212,6 +223,8 @@ applyTo f t = case t of
   Cons n e -> Cons n (f e)
   Case t xs -> Case (f t) (map (\(x, y) -> (f x, f y)) xs)
   CaseS t xs -> CaseS t (map (\(n, i, e) -> (n, i, (f e))) xs)
+  Data n xs -> Data n (map f xs)
+  Rout e -> Rout (f e)
   _ -> t
 
 -- Does a post processing job of converting
@@ -225,8 +238,11 @@ postProcess t = case t of
     _         -> App (pp e1) (pp e2)
   Case t xs -> App (pp (Lambda
                         (getCaseVar 0)
-                        (match (map (\(x, y) -> ([x], y)) xs) 0 errorCont)))
+                        (match (map (\(x, y) -> ([pp x], y)) xs) 0 errorCont)))
                (pp t)
+  Data n xs -> if null xs
+               then Cons n (Const 0)
+               else foldl1 (\y x -> Cons n (Pair (pp x) y)) xs
   t -> applyTo (pp) t
   where pp = postProcess
 
@@ -246,10 +262,13 @@ isVar :: Term -> Bool
 isVar (Var x) = True
 isVar _ = False
 
+-- Get the string from variable
+getVar :: Term -> String
+getVar (Var x) = x
+
 -- Eliminate and propagate variable in variable rule
 elemVar :: Int -> ([Term], Term) -> ([Term], Term)
 elemVar v (cs, x) = (tail cs, renameVar (getVar $ head cs) (getCaseVar v) x)
-  where getVar (Var x) = x
 
 -- Check if term is pair
 isPair :: Term -> Bool

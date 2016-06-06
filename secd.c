@@ -12,7 +12,7 @@
 int     code[CODE_MAX];       /* code segment */
 value_t stack[STACK_MAX];     /* stack segment */
 dump_t  dump[DUMP_MAX];       /* dump segment */
-
+int rec_flag = 0, stopon = -1;
 
 /* extend an environment (prepend a value to a list) 
 */
@@ -46,22 +46,36 @@ closure_t *mkclosure(int pc, env_t env) {
   return ptr;
 }
 
+/* allocate a new constructor
+*/
+cons_t *mkcons(env_t env) {
+  cons_t *ptr = (cons_t*) malloc(sizeof(cons_t));
+  assert(ptr!=NULL);
+  ptr->env = env;
+  return ptr;
+}
+
+int pc = 0;  // program counter
+int sp = 0;     // stack pointer 
+int dp = 0;     // dump pointer
+env_t env = NULL;    // environment pointer
 
 /* byte code interpretation loop
  */
 value_t interp(void) {
-  int pc = 0;  // program counter
-  int sp = 0;  // stack pointer 
-  int dp = 0;  // dump pointer
-  env_t env = NULL;    // environment pointer
-
   for (;;) {            // loop
     value_t opa, opb;   // temporary operands
     int t;              // temporary register
     closure_t *cptr;    // closure pointer
+    cons_t * csptr;     // constructor pointer
     env_t nenv;         // temporary environment
     int i;
 
+    if (stopon != -1)
+      printf("%d %d\n", code[pc], code[pc + 1]);
+
+    if (pc == stopon)
+      return stack[--sp];
     int opcode = code[pc++];    // fetch next opcode
 
     switch(opcode) {
@@ -91,6 +105,18 @@ value_t interp(void) {
       opa = stack[--sp];
       opb = stack[--sp];  
       stack[sp++] = opa * opb;
+      break;
+
+    case LST: 
+      opa = stack[--sp]; 
+      opb = stack[--sp];  
+      stack[sp++] = (opa <= opb) ? 1 : 0;
+      break;
+
+    case GTT: 
+      opa = stack[--sp]; 
+      opb = stack[--sp];  
+      stack[sp++] = (opa >= opb) ? 1 : 0;
       break;
 
     case SEL:
@@ -143,18 +169,18 @@ value_t interp(void) {
       opa = stack[--sp];
       nenv = extend(opb, NULL);
       nenv = extend(opa, nenv);
-      cptr = mkclosure(-1, nenv);
-      stack[sp++] = (value_t) cptr;
+      csptr = mkcons(nenv);
+      stack[sp++] = (value_t) csptr;
       break;
 
     case FST:
-      cptr = (closure_t*) stack[--sp];
-      stack[sp++] = lookup(0, cptr->env);
+      csptr = (cons_t*) stack[--sp];
+      stack[sp++] = lookup(0, csptr->env);
       break;
 
     case SND:
-      cptr = (closure_t*) stack[--sp];
-      stack[sp++] = lookup(1, cptr->env);
+      csptr = (cons_t*) stack[--sp];
+      stack[sp++] = lookup(1, csptr->env);
       break;
 
     case CONS:
@@ -162,15 +188,15 @@ value_t interp(void) {
       opa = stack[--sp]; // object on top of stack
       nenv = extend(opa, NULL);
       nenv = extend(t, nenv);
-      cptr = mkclosure(-1, nenv);
-      stack[sp++] = (value_t) cptr;
+      csptr = mkcons(nenv);
+      stack[sp++] = (value_t) csptr;
       break;
 
     case MATCH:
       t = code[pc++]; // fetch number of alts
-      cptr = (closure_t*) stack[--sp]; // pair on top of stack
-      opa = lookup(0, cptr->env); // label
-      opb = lookup(1, cptr->env); // code
+      csptr = (cons_t*) stack[--sp]; // pair on top of stack
+      opa = lookup(0, csptr->env); // label
+      opb = lookup(1, csptr->env); // code
       env = extend(opb, env); // augment environment
 
       int selcode = -1; // selected code
@@ -211,15 +237,15 @@ value_t interp(void) {
         nenv = extend(lb, nenv);
       }
 
-      cptr = mkclosure(-1, nenv);
-      stack[sp++] = (value_t) cptr;
+      csptr = mkcons(nenv);
+      stack[sp++] = (value_t) csptr;
 
       break;
 
     case SELECT:
       t = code[pc++]; // fetch label
-      cptr = (closure_t*) stack[--sp]; // pair on top of stack
-      nenv = cptr->env;
+      csptr = (cons_t*) stack[--sp]; // pair on top of stack
+      nenv = csptr->env;
 
       while (nenv != NULL) {
         int lb = nenv->elm;
@@ -235,6 +261,10 @@ value_t interp(void) {
         }
       }
 
+      break;
+
+    case ROUT:
+      rec_flag = 1;
       break;
 
     case HALT:
@@ -272,6 +302,30 @@ int main(void) {
 
   read_code(stdin);
   v = interp();
-  printf("%d\n", (int)v);
+
+  if (rec_flag) {
+    cons_t * csptr = (cons_t*) v; // pair on top of stack
+    env_t nenv = csptr->env;
+
+    while (nenv != NULL) {
+      nenv = nenv->next;
+      int vl = nenv->elm;
+      nenv = nenv->next;
+
+      stopon = pc;
+      dump[dp].pc = pc; // save pc in dump
+      dp++;
+      pc = vl;
+
+      interp();
+//      printf("%d ", (int)interp());
+    }
+
+    printf("\n");
+  }
+  else {
+    printf("%d\n", (int)v);
+  }
+
   return 0;
 }

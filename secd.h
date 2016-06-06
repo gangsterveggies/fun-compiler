@@ -26,6 +26,9 @@
 #define MATCH   16
 #define RECORD  17
 #define SELECT  18
+#define LST     19
+#define GTT     20
+#define ROUT    21
 
 /* values: 
    either an int or a pointer
@@ -48,6 +51,12 @@ typedef struct {
   int pc;      // program counter
   env_t env;   // environment
 } closure_t;
+
+/* constructor
+*/
+typedef struct {
+  env_t env;   // environment
+} cons_t;
 
 /* dump entry
    pair of program counter and environment pointer

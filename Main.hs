@@ -11,10 +11,10 @@
      multiple arguments;
    - single let-definitions; multiple definitions must be 
      translated to nested lets;
-   - single recursive function definitions (for simplicity).
+   - single recursive function definitions (for simplicity);
    - Pairs and generic tuples;
    - Lists, variants and records;
-   - Case guards (with patter matching);
+   - Case guards (with pattern matching);
 
   Pedro Paredes, 2016
 -}
@@ -31,10 +31,7 @@ main :: IO ()
 main = do
   args <- getArgs
   cd <- parseCode (args !! 0)
---  let cd = postProcess $ ex !! (read $ head args)
---  putStrLn $ show $ cd
-  putStrIf (length args > 2) $ show $ (resolveLabels . runCodeGen . compileMain) cd
-  putStrIf (length args > 2) $ show $ (assemble . resolveLabels . runCodeGen . compileMain) cd
+--  putStrLn $ show cd
   writeBytecode (args !! 1) $ (assemble . resolveLabels . runCodeGen . compileMain) cd
   return ()
 

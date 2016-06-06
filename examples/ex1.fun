@@ -5,3 +5,4 @@ let fact =
 in
   fact 5
 
+-- Tests the base implementation

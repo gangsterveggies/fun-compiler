@@ -7,3 +7,4 @@ in
   in
     fst x + snd x
 
+-- Tests pattern matching and lists
