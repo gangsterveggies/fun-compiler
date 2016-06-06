@@ -1,6 +1,7 @@
 # FUN compiler to SECD
 
-This compiler implements the following features:
+This compiler implements the following features (the bold represent
+the ones implemented by me):
 
  - The only primitive data are integers with primitives +, - and * 
  - If-zero-then-else conditional;
