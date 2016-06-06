@@ -29,7 +29,7 @@ lexer = P.makeTokenParser fun
   where fun = haskellStyle { reservedNames = ["ifzero", "then", "else",
                                               "let", "in", "fix",
                                               "cons", "case", "of",
-                                              "otherwise", "record", "out"]
+                                              "otherwise", "record", "out", "data"]
                            , reservedOpNames = ["=", "->", "\\", 
                                                 "*", "+", "-",
                                                 ".", "<", ">"],
