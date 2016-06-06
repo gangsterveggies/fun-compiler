@@ -24,6 +24,13 @@ in
    t3 = (find 3 cs);
    t4 = (find 4 cs);
    t5 = (find 5 cs);
-   t6 = (find 6 cs)}.t1
+   t6 = (find 6 cs);
+   t7 = (find 7 cs);
+   t8 = (find 8 cs)}
 
--- Ultimate stress test
+-- Ultimate stress test:
+--  implements a binary search tree;
+--  tests outputing a record (using a special
+-- precompiler note on top);
+--  tests the data constructor (that converts
+-- to a 'cons Label ...');

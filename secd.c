@@ -59,6 +59,7 @@ int pc = 0;  // program counter
 int sp = 0;     // stack pointer 
 int dp = 0;     // dump pointer
 env_t env = NULL;    // environment pointer
+env_t lastenv = NULL;
 
 /* byte code interpretation loop
  */
@@ -71,11 +72,9 @@ value_t interp(void) {
     env_t nenv;         // temporary environment
     int i;
 
-    if (stopon != -1)
-      printf("%d %d\n", code[pc], code[pc + 1]);
-
     if (pc == stopon)
-      return stack[--sp];
+      return stack[sp - 1];
+
     int opcode = code[pc++];    // fetch next opcode
 
     switch(opcode) {
@@ -239,6 +238,7 @@ value_t interp(void) {
 
       csptr = mkcons(nenv);
       stack[sp++] = (value_t) csptr;
+      lastenv = env;
 
       break;
 
@@ -304,21 +304,25 @@ int main(void) {
   v = interp();
 
   if (rec_flag) {
-    cons_t * csptr = (cons_t*) v; // pair on top of stack
+    env = lastenv;
+    cons_t * csptr = (cons_t*) v; // record on top of stack
     env_t nenv = csptr->env;
 
+    int jump_list[10], ct = 0;
     while (nenv != NULL) {
       nenv = nenv->next;
       int vl = nenv->elm;
       nenv = nenv->next;
+      jump_list[ct++] = vl;
+    }
 
+    while (--ct >= 0) {
       stopon = pc;
       dump[dp].pc = pc; // save pc in dump
       dp++;
-      pc = vl;
+      pc = jump_list[ct];
 
-      interp();
-//      printf("%d ", (int)interp());
+      printf("%d ", (int)interp());
     }
 
     printf("\n");

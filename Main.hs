@@ -31,7 +31,6 @@ main :: IO ()
 main = do
   args <- getArgs
   cd <- parseCode (args !! 0)
---  putStrLn $ show cd
   writeBytecode (args !! 1) $ (assemble . resolveLabels . runCodeGen . compileMain) cd
   return ()
 
